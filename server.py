@@ -1,6 +1,6 @@
+import json
 import re
 import socket
-import json
 
 import pymongo
 
@@ -28,6 +28,199 @@ def write_json(json_database):
         json.dump(json_database, f, indent=4)
 
 
+def check_primary_or_unique_key(attribute_name, attributes_list):
+    unique_keys = [key['attributeName'] for key in attributes_list]
+    return attribute_name in unique_keys
+
+
+def create_table_indexes(table_name, nonuniqueKeys, uniqueKeys, primaryKey):
+    db = client[used_database]
+    collection1 = db[table_name]
+
+    if len(primaryKey) > 0:
+        for prim in primaryKey:
+            uniqueKeys.remove(prim)
+        combined_primary_keys = '+'.join(obj["attributeName"] for obj in primaryKey)
+        primarykey_index_name = f"{combined_primary_keys}_{table_name}_uniq_index"
+
+        collection = db[primarykey_index_name]
+        mongo_document = {
+            "key": "",
+            "values": ""
+        }
+        collection.insert_one(mongo_document)
+        collection1.create_index([(combined_primary_keys, pymongo.ASCENDING)], unique=False, name=primarykey_index_name)
+
+    for unique in uniqueKeys:
+        index_name = f"{unique['attributeName']}_{table_name}_uniq_index"
+        collection = db[index_name]
+        mongo_document = {
+            "key": "",
+            "values": ""
+        }
+
+        collection.insert_one(mongo_document)
+        collection1.create_index([(unique['attributeName'], pymongo.ASCENDING)], unique=False, name=index_name)
+
+    for nonunique in nonuniqueKeys:
+        index_name = f"{nonunique}_{table_name}_nonuniq_index"
+        collection = db[index_name]
+        mongo_document = {
+            "key": "",
+            "values": ""
+        }
+        collection.insert_one(mongo_document)
+        collection1.create_index([(nonunique, pymongo.ASCENDING)], unique=False, name=index_name)
+
+    # collection1.drop_index("__id_")
+
+    # msg = "CREATED INDEXES {} FOR TABLE {}".format(new_create_indexes, table_name)
+    # serverSocket.sendto(msg.encode(), address)
+    # collection.create_index([(uniq_key, pymongo.ASCENDING)], unique=True, name=index_name)
+
+def get_index_fields(fields):
+    return []
+
+
+def insert_into_indexes(table_name, value_dict, prim_key, prim_key_attributes, non_primary_attributes):
+    data = open_file()
+    db = client[used_database]
+    collection = db[table_name]
+    existing_indexes = [index_name for index_name in collection.index_information().keys() if
+                        index_name != '_id_']
+
+    for auto_generated_index in existing_indexes:
+        index_type = auto_generated_index.split("_")[-2]
+        fields = auto_generated_index.split("_")[0].split("+")
+        new_prim_key = '#'.join(value_dict[obj] for obj in fields)
+        collection1 = db[auto_generated_index]
+        if collection1.count_documents({'key': {'$ne': ""}}) == 0:
+            collection1.delete_one({'key': "", 'values': ""})
+        if fields == prim_key_attributes:
+            if check_primary_key_uniqueness(collection1, 'key', prim_key):
+                mongo_document = {
+                    "key": prim_key,
+                    "values": non_primary_attributes
+                }
+                collection1.insert_one(mongo_document)
+        elif index_type == "uniq":
+            if check_primary_key_uniqueness(collection1, 'key', new_prim_key):
+                mongo_document = {
+                    "key": new_prim_key,
+                    "values": prim_key
+                }
+                collection1.insert_one(mongo_document)
+        elif index_type == "nonuniq":
+            if check_primary_key_uniqueness(collection1, 'key', new_prim_key):
+                mongo_document = {
+                    "key": new_prim_key,
+                    "values": prim_key
+                }
+                collection1.insert_one(mongo_document)
+            else:
+                existing_doc = collection1.find_one({'key': new_prim_key})
+                if existing_doc:
+                    updated_values = f"{existing_doc['values']}#{prim_key}"
+                    collection1.update_one({'key': new_prim_key}, {'$set': {'values': updated_values}})
+                else:
+                    # If the document with the non-unique key does not exist, insert a new document
+                    mongo_document = {
+                        "key": new_prim_key,
+                        "values": prim_key
+                    }
+                    collection1.insert_one(mongo_document)
+
+    # for index in data["databases"][used_database]["tables"][table_name]["indexFiles"]:
+    #     index_name = index['indexName']
+    #     index_type = index['isUnique'] == '1'
+    #     index_attributes = [attr['attributeName'] for attr in index['indexAttributes']]
+    #     new_prim_key = '#'.join(value_dict[obj] for obj in index_attributes)
+    #     if index_name != table_name:
+    #         collection1 = db[index_name]
+    #         if index_type:
+    #             if check_primary_key_uniqueness(collection1, 'key', new_prim_key):
+    #                 mongo_document = {
+    #                     "key": new_prim_key,
+    #                     "values": prim_key
+    #                 }
+    #                 collection1.insert_one(mongo_document)
+    #         else:
+    #             if check_primary_key_uniqueness(collection1, 'key', new_prim_key):
+    #                 mongo_document = {
+    #                     "key": new_prim_key,
+    #                     "values": prim_key
+    #                 }
+    #                 collection1.insert_one(mongo_document)
+    #             else:
+    #                 existing_doc = collection1.find_one({'key': new_prim_key})
+    #                 if existing_doc:
+    #                     updated_values = f"{existing_doc['values']}#{prim_key}"
+    #                     collection1.update_one({'key': new_prim_key}, {'$set': {'values': updated_values}})
+    #                 else:
+    #                     # If the document with the non-unique key does not exist, insert a new document
+    #                     mongo_document = {
+    #                         "key": new_prim_key,
+    #                         "values": prim_key
+    #                     }
+    #                     collection1.insert_one(mongo_document)
+
+
+def create_uniq_index(table_name, index_name, uniq_key):
+    db = client[used_database]
+    collection = db[table_name]
+
+    # index_name = f"{uniq_key}_{table_name}_uniq_index"
+
+    try:
+        # Create a unique index on the specified field
+        collection.create_index([(uniq_key, pymongo.ASCENDING)], unique=False, name=index_name)
+
+        collection = db[index_name]
+        mongo_document = {
+            "key": "",
+            "values": ""
+        }
+        collection.insert_one(mongo_document)
+
+        # Update the document with the unique index field
+        # collection.update_one({'key': primary_key_value}, {'$set': {uniq_key: primary_key_value}})
+
+        # msg = f"Created and updated unique index for {uniq_key} in table {table_name}."
+        # serverSocket.sendto(msg.encode(), address)
+    except pymongo.errors.DuplicateKeyError:
+        # Handle duplicate key error
+        msg = f"Unique key violation. {uniq_key} already exists in table {table_name}."
+        serverSocket.sendto(msg.encode(), address)
+
+
+def create_nonuniq_index(table_name, index_name, nonuniq_key):
+    db = client[used_database]
+    collection = db[table_name]
+
+    # index_name = f"{nonuniq_key}_{table_name}_uniq_index"
+
+    try:
+        # Create a nonunique index on the specified field
+        collection.create_index([(nonuniq_key, pymongo.ASCENDING)], unique=False, name=index_name)
+
+        collection = db[index_name]
+        mongo_document = {
+            "key": "",
+            "values": ""
+        }
+        collection.insert_one(mongo_document)
+
+        # Update the document with the nonunique index field
+        # collection.update_one({'key': primary_key_value}, {'$set': {nonuniq_key: primary_key_value}})
+
+        # msg = f"Created and updated nonunique index for {nonuniq_key} in table {table_name}."
+        # serverSocket.sendto(msg.encode(), address)
+    except pymongo.errors.DuplicateKeyError:
+        # Handle duplicate key error
+        msg = f"Nonunique key violation. {nonuniq_key} already exists in table {table_name}."
+        serverSocket.sendto(msg.encode(), address)
+
+
 used_database = ""
 
 
@@ -45,7 +238,7 @@ def use(statement):
 def parseAttributesForIndex(statement):
     attributes = []
     for attribute in statement:
-        if attribute != '(' and attribute != ');':
+        if attribute != '(' and attribute != ');' and attribute != ')':
             attributes.append(attribute.strip().replace(',', ''))
     return attributes
 
@@ -70,7 +263,6 @@ def create(statement):
             write_json(data)
             db = client[database_name]
             collection = db["local"]
-            db = client[database_name]
             mongo_document = {
                 "key": "",
                 "values": ""
@@ -83,90 +275,100 @@ def create(statement):
             serverSocket.sendto(msg.encode(), address)
     elif statement[0].lower() == "table":
         if used_database:
+            db = client[used_database]
             tableName = statement[1][:-1]
-            statement = statement[2:]  # remove table and table name from statement
-            attributes = parseAttributes(statement)  # separate attributes by comma
-            structure = []
-            primaryKey = []
-            uniqueKeys = []
-            indexAttributes = []
-            indexFiles = []
-            attributesNames = []
-            foreignKeys = []
-            foundIndexes = 0
-            for attribute in attributes:
-                attribute = attribute.split(' ')
-                if attribute[0] == "":
-                    attribute = attribute[1:]  # check for white spaces after comma
-                if "primary" in attribute:  # check for any primary key
-                    primaryKey.append({"attributeName": attribute[0]})
-                    uniqueKeys.append({"attributeName": attribute[0]})
-                    indexAttributes.append({"attributeName": attribute[0]})
-                    foundIndexes = 1
-                if "unique" in attribute:  # check for any unique key
-                    uniqueKeys.append({"attributeName": attribute[0]})
-                if "not" and "null" in attribute or "primary" in attribute:  # check if attribute value is not null
-                    isNull = '0'
-                else:
-                    isNull = '1'
-                if '(' in attribute[1]:  # check if there's a declared length
-                    length = attribute[1].split('(', 1)[1]
-                    length = length[:-1]
-                    type = attribute[1].split('(', 1)[0]
-                else:
-                    length = "4"
-                    type = attribute[1]
-                if type not in standard_data_types:  # check attribute's type
-                    msg = "INVALID ATTRIBUTE TYPE: {}".format(type)
-                    serverSocket.sendto(msg.encode(), address)
-                    return
-                if "references" in attribute:
-                    referedTable = attribute[5].split('(')[0]
-                    referedAttribute = attribute[5].split('(')[1][:-1]
-                    tables = data["databases"][used_database]["tables"]
-                    if referedTable not in tables:
-                        msg = "TABLE NOT FOUND IN GIVEN DATABASE {}".format(used_database)
-                        serverSocket.sendto(msg.encode(), address)
+            if tableName not in db.list_collection_names():
+                statement = statement[2:]  # remove table and table name from statement
+                attributes = parseAttributes(statement)  # separate attributes by comma
+                structure = []
+                primaryKey = []
+                uniqueKeys = []
+                nonuniqueKeys = []
+                indexAttributes = []
+                indexFiles = []
+                attributesNames = []
+                foreignKeys = []
+                foundIndexes = 0
+                for attribute in attributes:
+                    attribute = attribute.split(' ')
+                    if attribute[0] == "":
+                        attribute = attribute[1:]  # check for white spaces after comma
+                    if "primary" in attribute:  # check for any primary key
+                        primaryKey.append({"attributeName": attribute[0]})
+                        uniqueKeys.append({"attributeName": attribute[0]})
+                        indexAttributes.append({"attributeName": attribute[0]})
+                        foundIndexes = 1
+                    if "unique" in attribute:  # check for any unique key
+                        uniqueKeys.append({"attributeName": attribute[0]})
+                    if "not" and "null" in attribute or "primary" in attribute:  # check if attribute value is not null
+                        isNull = '0'
                     else:
-                        structure1 = data["databases"][used_database]["tables"][referedTable]["structure"]
-                        for attribute1 in structure1:
-                            attributesNames.append(attribute1["attributeName"])
-                        if referedAttribute not in attributesNames:
-                            msg = "ATTRIBUTE NOT FOUND IN GIVEN TABLE {}".format(referedTable)
+                        isNull = '1'
+                    if '(' in attribute[1]:  # check if there's a declared length
+                        length = attribute[1].split('(', 1)[1]
+                        length = length[:-1]
+                        type = attribute[1].split('(', 1)[0]
+                    else:
+                        length = "4"
+                        type = attribute[1]
+                    if type not in standard_data_types:  # check attribute's type
+                        msg = "INVALID ATTRIBUTE TYPE: {}".format(type)
+                        serverSocket.sendto(msg.encode(), address)
+                        return
+                    if "references" in attribute:
+                        referedTable = attribute[5].split('(')[0]
+                        referedAttribute = attribute[5].split('(')[1][:-1]
+                        tables = data["databases"][used_database]["tables"]
+                        if referedTable not in tables:
+                            msg = "TABLE NOT FOUND IN GIVEN DATABASE {}".format(used_database)
                             serverSocket.sendto(msg.encode(), address)
                         else:
-                            foreignKeys.append({"foreignKey": attribute[0], "refTable": referedTable,
-                                                "refAttribute": referedAttribute})
-                structure.append({"attributeName": attribute[0], "type": type, "length": length, "isNull": isNull})
-            if foundIndexes == 1:  # check if there are declared indexes
-                indexFiles.append({"indexName": tableName, "keyLength": len(tableName), "isUnique": "1",
-                                   "indexType": "BTree",
-                                   "indexAttributes": indexAttributes})
-            table = {"tableName": tableName, "fileName": tableName + ".bin", "rowLength": len(attributes),
-                     "structure": structure,
-                     "primaryKey": primaryKey,
-                     "foreignKeys": foreignKeys,
-                     "uniqueKeys": uniqueKeys,
-                     "indexFiles": indexFiles}
-            data["databases"][used_database]["tables"][tableName] = table
-            write_json(data)
-            db = client[used_database]
-            collection = db[tableName]
-            mongo_document = {
-                "key": "",
-                "values": ""
-            }
-            collection.insert_one(mongo_document)
-            msg = "CREATED TABLE {}".format(tableName)
-            serverSocket.sendto(msg.encode(), address)
+                            structure1 = data["databases"][used_database]["tables"][referedTable]["structure"]
+                            for attribute1 in structure1:
+                                attributesNames.append(attribute1["attributeName"])
+                            if referedAttribute not in attributesNames:
+                                msg = "ATTRIBUTE NOT FOUND IN GIVEN TABLE {}".format(referedTable)
+                                serverSocket.sendto(msg.encode(), address)
+                            else:
+                                foreignKeys.append({"foreignKey": attribute[0], "refTable": referedTable,
+                                                    "refAttribute": referedAttribute})
+                    structure.append({"attributeName": attribute[0], "type": type, "length": length, "isNull": isNull})
+                    if not check_primary_or_unique_key(attribute[0], uniqueKeys):
+                        nonuniqueKeys.append(attribute[0])
+                if foundIndexes == 1:  # check if there are declared indexes
+                    indexFiles.append({"indexName": tableName, "keyLength": len(tableName), "isUnique": "1",
+                                       "indexType": "BTree",
+                                       "indexAttributes": indexAttributes})
+                table = {"tableName": tableName, "fileName": tableName + ".bin", "rowLength": len(attributes),
+                         "structure": structure,
+                         "primaryKey": primaryKey,
+                         "foreignKeys": foreignKeys,
+                         "uniqueKeys": uniqueKeys,
+                         "indexFiles": indexFiles}
+                data["databases"][used_database]["tables"][tableName] = table
+                write_json(data)
+                db = client[used_database]
+                collection = db[tableName]
+                mongo_document = {
+                    "key": "",
+                    "values": ""
+                }
+                collection.insert_one(mongo_document)
+                create_table_indexes(tableName, nonuniqueKeys, uniqueKeys, primaryKey)
+                msg = "CREATED TABLE {}".format(tableName)
+                serverSocket.sendto(msg.encode(), address)
+            else:
+                msg = "TABLE {} ALREADY EXISTS.".format(tableName)
+                serverSocket.sendto(msg.encode(), address)
         else:
             msg = "DATABASE NOT SELECTED"
             serverSocket.sendto(msg.encode(), address)
     elif statement[0].lower() == "index":
         if used_database:
-            indexName = statement[1]
-            tableName = statement[3][:-1]
-            statement = statement[4:]  # remove index name and table name from statement
+            indexType = statement[1]
+            indexName = statement[2]
+            tableName = statement[4][:-1]
+            statement = statement[5:]  # remove index name and table name from statement
             indexFiles = data["databases"][used_database]["tables"][tableName]["indexFiles"]
             structure = data["databases"][used_database]["tables"][tableName]["structure"]
             foundAttributes = 1
@@ -174,9 +376,14 @@ def create(statement):
             attributesNames = []
             attributes = parseAttributesForIndex(statement)  # separate attributes by comma
 
+            db = client[used_database]
+            collection = db[tableName]
+            existing_indexes = [index_name for index_name in collection.index_information().keys() if
+                                index_name != '_id_']
             # Check if an index with the same name already exists
             existing_index_names = [idx["indexName"] for idx in indexFiles]
-            if indexName in existing_index_names:
+
+            if f"{indexName}_uniq_index" in existing_indexes or f"{indexName}_nonuniq_index" in existing_indexes:
                 msg = "INDEX {} ALREADY EXISTS FOR TABLE {}".format(indexName, tableName)
                 serverSocket.sendto(msg.encode(), address)
             else:
@@ -192,6 +399,16 @@ def create(statement):
                     else:
                         indexAttributes.append({"attributeName": attribute})
                 if foundAttributes == 1:
+                    primary_key = data["databases"][used_database]["tables"][tableName]["primaryKey"][0][
+                        "attributeName"]
+                    if "unique" == indexType:
+                        create_uniq_index(tableName, indexName, '_'.join(attributes))
+                    elif "nonunique" == indexType:
+                        create_nonuniq_index(tableName, indexName, '_'.join(attributes))
+                    else:
+                        msg = "INVALID INDEX TYPE"
+                        serverSocket.sendto(msg.encode(), address)
+
                     indexFiles.append({"indexName": indexName, "keyLength": len(indexName), "isUnique": "1",
                                        "indexType": "BTree",
                                        "indexAttributes": indexAttributes})
@@ -248,7 +465,7 @@ def insert(statement):
 
             # Split values using both commas and spaces as delimiters
             values = re.split(r'[,\s]+', values_str.strip())
-            values = [v.strip() for v in values if v.strip() != ');']
+            values = [v.strip() for v in values if v.strip() != ');' and v.strip() != ')' and v.strip() != '(']
 
             table_structure = data["databases"][used_database]["tables"][table_name]["structure"]
             value_dict = {table_structure[i]["attributeName"]: values[i] for i in range(len(values))}
@@ -280,7 +497,10 @@ def insert(statement):
                             return
 
                     if is_primary_key:
-                        primary_key_value = value
+                        if primary_key_value is None:
+                            primary_key_value = str(value)
+                        else:
+                            primary_key_value += f'${value}'
                     else:
                         non_primary_values.append(str(value))
 
@@ -321,20 +541,13 @@ def insert(statement):
                     "values": non_primary_attributes
                 }
 
-                for index_info in data["databases"][used_database]["tables"][table_name]["indexFiles"]:
-                    index_attributes = index_info["indexAttributes"]
-                    unique = index_info.get("isUnique", False)
-
-                    # Create index on MongoDB collection
-                    index_keys = [(attr["attributeName"], pymongo.ASCENDING) for attr in index_attributes]
-                    collection.create_index(index_keys, unique=unique)
-
                 # If no documents with non-empty 'key' are found, then delete the document with empty 'key' and 'values'
                 if collection.count_documents({'key': {'$ne': ""}}) == 0:
                     collection.delete_one({'key': "", 'values': ""})
 
                 if check_primary_key_uniqueness(collection, 'key', primary_key_value):
                     collection.insert_one(mongo_document)
+                    insert_into_indexes(table_name, value_dict, primary_key_value, [attr["attributeName"] for attr in primary_key_attributes], non_primary_attributes)
                     msg = f"Values inserted into table {table_name}."
                     serverSocket.sendto(msg.encode(), address)
                 else:
@@ -379,6 +592,19 @@ def drop(statement):
             table = data["databases"][used_database]["tables"].get(table_name, None)
             if table:
                 # Check for foreign key references to this table
+                db = client[used_database]
+                index_information = db[table_name].index_information()
+                indexes = [key for key in index_information.keys()]
+                if "_id_" in indexes:
+                    indexes.remove("_id_")
+                if len(indexes) > 0:
+                    indexesString = "index" if len(indexes) == 1 else "indexes"
+                    msg = "Cannot delete table \"{}\" because it contains the \"{}\" \"{}\"".format(table_name,
+                                                                                                    indexesString,
+                                                                                                    ', '.join(indexes))
+                    serverSocket.sendto(msg.encode(), address)
+                    return
+
                 for other_table_name, other_table in data["databases"][used_database]["tables"].items():
                     if other_table_name != table_name:
                         for foreign_key in other_table.get("foreignKeys", []):

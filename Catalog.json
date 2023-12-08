@@ -1,5 +1,735 @@
 {
     "databases": {
-
+        "testIndex": {
+            "name": "testIndex",
+            "tables": {
+                "table1": {
+                    "tableName": "table1",
+                    "fileName": "table1.bin",
+                    "rowLength": 3,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "pin",
+                            "type": "varchar",
+                            "length": "13",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "table1",
+                            "keyLength": 6,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ],
+                    "nonUniqueAttributes": []
+                }
+            }
+        },
+        "faculty": {
+            "name": "faculty",
+            "tables": {
+                "student": {
+                    "tableName": "student",
+                    "fileName": "student.bin",
+                    "rowLength": 3,
+                    "structure": [
+                        {
+                            "attributeName": "studId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "code",
+                            "type": "varchar",
+                            "length": "13",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "studId"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "studId"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "student",
+                            "keyLength": 7,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "studId"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "nameCodeInd",
+                            "keyLength": 11,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "name"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "studIdCodeIndex",
+                            "keyLength": 15,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "studId"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "testInd",
+                            "keyLength": 7,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "name"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "group": {
+                    "tableName": "group",
+                    "fileName": "group.bin",
+                    "rowLength": 2,
+                    "structure": [
+                        {
+                            "attributeName": "groupId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "groupId"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "groupId"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "group",
+                            "keyLength": 5,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "groupId"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "grade": {
+                    "tableName": "grade",
+                    "fileName": "grade.bin",
+                    "rowLength": 2,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "studentId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [
+                        {
+                            "foreignKey": "studentId",
+                            "refTable": "student",
+                            "refAttribute": "studId"
+                        }
+                    ],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "grade",
+                            "keyLength": 5,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "db": {
+            "name": "db",
+            "tables": {
+                "student": {
+                    "tableName": "student",
+                    "fileName": "student.bin",
+                    "rowLength": 3,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "code",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "student",
+                            "keyLength": 7,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "unique",
+                            "keyLength": 6,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "name"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "unique",
+                            "keyLength": 6,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "name"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "testIndex2321",
+                            "keyLength": 13,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "name"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "testt111": {
+                    "tableName": "testt111",
+                    "fileName": "testt111.bin",
+                    "rowLength": 4,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "code",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "studId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "code"
+                        }
+                    ],
+                    "foreignKeys": [
+                        {
+                            "foreignKey": "studId",
+                            "refTable": "student",
+                            "refAttribute": "id"
+                        }
+                    ],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "code"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "testt111",
+                            "keyLength": 8,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "testTable": {
+                    "tableName": "testTable",
+                    "fileName": "testTable.bin",
+                    "rowLength": 4,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "code",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "studId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "code"
+                        }
+                    ],
+                    "foreignKeys": [
+                        {
+                            "foreignKey": "studId",
+                            "refTable": "student",
+                            "refAttribute": "id"
+                        }
+                    ],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "code"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "testTable",
+                            "keyLength": 9,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "grupa": {
+                    "tableName": "grupa",
+                    "fileName": "grupa.bin",
+                    "rowLength": 4,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "code",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "studId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "code"
+                        }
+                    ],
+                    "foreignKeys": [
+                        {
+                            "foreignKey": "studId",
+                            "refTable": "student",
+                            "refAttribute": "id"
+                        }
+                    ],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "code"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "grupa",
+                            "keyLength": 5,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                },
+                                {
+                                    "attributeName": "code"
+                                }
+                            ]
+                        },
+                        {
+                            "indexName": "testINdexCeva",
+                            "keyLength": 13,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "code"
+                                },
+                                {
+                                    "attributeName": "name"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "grade": {
+                    "tableName": "grade",
+                    "fileName": "grade.bin",
+                    "rowLength": 4,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "disciplineName",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "studId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "mark",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [
+                        {
+                            "foreignKey": "studId",
+                            "refTable": "student",
+                            "refAttribute": "id"
+                        }
+                    ],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "grade",
+                            "keyLength": 5,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "grade2": {
+                    "tableName": "grade2",
+                    "fileName": "grade2.bin",
+                    "rowLength": 4,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "disciplineName",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "studId",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "mark",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [
+                        {
+                            "foreignKey": "studId",
+                            "refTable": "student",
+                            "refAttribute": "id"
+                        }
+                    ],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "grade2",
+                            "keyLength": 6,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "testUnique": {
+                    "tableName": "testUnique",
+                    "fileName": "testUnique.bin",
+                    "rowLength": 2,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "20",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        },
+                        {
+                            "attributeName": "name"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "testUnique",
+                            "keyLength": 10,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
     }
 }
