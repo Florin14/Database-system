@@ -1,7 +1,7 @@
 import json
 import re
 import socket
-
+from prettytable import PrettyTable
 import pymongo
 
 ip_address = "127.0.0.1"
@@ -632,31 +632,31 @@ def drop(statement):
             serverSocket.sendto(msg.encode(), address)
 
 
-# def check_referential_integrity_for_delete(key_attr, key_val, data, used_database):
-#     # Loop through all tables in the database
-#     for table_name, table_info in data["databases"][used_database]["tables"].items():
-#         # If the current table contains the key as a primary key, skip it
-#         primary_keys = table_info.get('primaryKey', [])
-#         if any(pk['attributeName'] == key_attr for pk in primary_keys):
-#             continue  # Skip the table where the key is the primary key
-#
-#         # Check if the table has foreign keys and iterate through them
-#         for fk in table_info.get('foreignKeys', []):
-#             # Check if the foreign key references the key_attr (primary key in another table)
-#             if fk['refAttribute'] == key_attr:
-#                 # Connect to the MongoDB database and collection
-#                 db = client[used_database]
-#                 collection = db[table_name]
-#
-#                 # Check if any document in the collection contains the key_val as a foreign key value
-#                 # Build a query to check for the foreign key value
-#                 query = {fk['foreignKey']: key_val}
-#                 if collection.count_documents(query) > 0:
-#                     # If key_val is being used as a foreign key, return a message indicating a violation
-#                     return f"Cannot delete: The key {key_val} is being referenced as a foreign key in table '{table_name}', under the attribute '{fk['foreignKey']}'."
-#
-#     # If no references are found, return None indicating it's safe to delete
-#     return None
+def check_referential_integrity_for_delete(key_attr, key_val, data, used_database):
+    # Loop through all tables in the database
+    for table_name, table_info in data["databases"][used_database]["tables"].items():
+        # If the current table contains the key as a primary key, skip it
+        primary_keys = table_info.get('primaryKey', [])
+        if any(pk['attributeName'] == key_attr for pk in primary_keys):
+            continue  # Skip the table where the key is the primary key
+
+        # Check if the table has foreign keys and iterate through them
+        for fk in table_info.get('foreignKeys', []):
+            # Check if the foreign key references the key_attr (primary key in another table)
+            if fk['refAttribute'] == key_attr:
+                # Connect to the MongoDB database and collection
+                db = client[used_database]
+                collection = db[table_name]
+
+                # Check if any document in the collection contains the key_val as a foreign key value
+                # Build a query to check for the foreign key value
+                query = {fk['foreignKey']: key_val}
+                if collection.count_documents(query) > 0:
+                    # If key_val is being used as a foreign key, return a message indicating a violation
+                    return f"Cannot delete: The key {key_val} is being referenced as a foreign key in table '{table_name}', under the attribute '{fk['foreignKey']}'."
+
+    # If no references are found, return None indicating it's safe to delete
+    return None
 
 
 def delete(statement):
@@ -722,6 +722,114 @@ def delete(statement):
         serverSocket.sendto(msg.encode(), address)
 
 
+
+def select(statement):
+    data = open_file()
+    global used_database
+    if ((statement[0].lower() != "*") and (statement[0].lower() != "distinct")) or (statement[1].lower() != "from"):
+        serverSocket.sendto("INVALID SELECT COMMAND".encode(), address)
+    else:
+        if used_database:
+            table = data["databases"][used_database]["tables"].get(statement[2], None)
+            if table:
+                db = client[used_database]
+                collection = db[statement[2]]
+                if len(statement) == 3:
+                    attributes = collection.find_one().keys()
+                    t = PrettyTable(attributes)
+                    cursor = collection.find()
+                    for value in cursor:
+                        t.add_row([value[attr] for attr in attributes])
+                    msg = str(t)
+                    serverSocket.sendto(msg.encode(), address)
+                    # for key in r.keys(used_database + ':' + statement[2] + ':*'):
+                    #     values = []
+                    #     values.append(key.decode().split(':')[2])
+                    #     values += r.get(key).decode().split('#')
+                    #     t.add_row(values)
+                    # sFile = open("databases/select.txt", 'w')
+                    # sFile.write(t.get_string())
+                    # sFile.close()
+                    # serverSocket.sendto("SELECT".encode(), address)
+                # if len(statement) > 3:
+                #     attributes = []
+                #     selection = []
+                #     select_type = statement[0].lower()
+                #     table = statement[2]
+                #     for str in data["databases"][used_database]["tables"][table]["structure"]:
+                #         attributes.append(str["attributeName"])
+                #     t = PrettyTable(attributes)
+                #     statement = statement[4:]
+                #     if "and" in statement:
+                #         statement.pop(1)
+                #     index = data["databases"][used_database]["tables"][table]["indexFiles"]
+                #     arg_attributes = []
+                #     arg_values = []
+                #     indexes = []
+                #     for s in statement:
+                #         arg_attributes.append(s.split("=")[0])
+                #         arg_values.append(s.split("=")[1])
+                #     for inx in index:
+                #         l = []
+                #         for ind in inx['indexAttributes']:
+                #             l.append(ind["attributeName"])
+                #         indexes.append(l)
+                #     for i in indexes:
+                #         if set(i).issubset(set(arg_attributes)):
+                #             statement_values = ""
+                #             for at in i:
+                #                 x = arg_attributes.index(at)
+                #                 statement_values += arg_values[x] + ":"
+                #             statement_values = statement_values[:-1]
+                #             i_key = r.keys("*:" + used_database + ":" + table + ":" + statement_values)[0].decode()
+                #             i_values = r.get(i_key).decode().split("#")
+                #             for val in i_values:
+                #                 l = []
+                #                 obj = r.get(used_database + ":" + table + ":" + val).decode().split("#")
+                #                 l.append(val)
+                #                 for o in obj:
+                #                     l.append(o)
+                #                 selection.append(l)
+                #             arg_attributes = list(set(arg_attributes) - set(i))
+                #     print(arg_attributes)
+                #     if len(arg_attributes) > 0:
+                #         print(selection)
+                #         if selection == []:
+                #             keys = r.keys(used_database + ":" + table + ":*")
+                #             for k in keys:
+                #                 l = []
+                #                 l.append(k.decode().split(":")[-1])
+                #                 obj = r.get(k.decode()).decode().split("#")
+                #                 for o in obj:
+                #                     l.append(o)
+                #                 selection.append(l)
+                #         for arg in arg_attributes:
+                #             ind = attributes.index(arg)
+                #             val = arg_values[arg_attributes.index(arg)]
+                #             selection = filter(lambda item: item[ind] == val, selection)
+                #     copy = []
+                #     if select_type == "distinct":
+                #         for s in selection:
+                #             if r.get(used_database + ":" + table + ":" + s[0]).decode() not in copy:
+                #                 copy.append(r.get(used_database + ":" + table + ":" + s[0]).decode())
+                #                 t.add_row(s)
+                #     else:
+                #         for s in selection:
+                #             t.add_row(s)
+                #     sFile = open("databases/select.txt", 'w')
+                #     sFile.write(t.get_string())
+                #     sFile.close()
+                #     serverSocket.sendto("SELECT".encode(), address)
+            else:
+                msg = "TABLE DOES NOT EXIST"
+                serverSocket.sendto(msg.encode(), address)
+        else:
+            msg = "DATABASE DOES NOT EXIST"
+            serverSocket.sendto(msg.encode(), address)
+
+
+
+
 print("Server Up")
 
 while True:
@@ -729,7 +837,7 @@ while True:
 
     clientData = clientData.decode().split(" ")
 
-    if clientData[0].lower() in ["create", "drop", "use", "insert", "delete"]:
+    if clientData[0].lower() in ["create", "drop", "use", "insert", "delete", "select"]:
         func = locals()[clientData[0]]
         del clientData[0]
         func(clientData)
