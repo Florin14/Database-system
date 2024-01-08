@@ -82,6 +82,41 @@ def get_index_fields(fields):
     return []
 
 
+def evaluate_condition(record, condition):
+    # Extracting individual conditions separated by 'AND'
+    conditions = condition.split("AND")
+
+    # Evaluating each condition
+    for cond in conditions:
+        if "=" in cond:
+            # Handling equality condition
+            attr, value = cond.split("=")
+            attr = attr.strip()
+            value = value.strip()
+
+            # Check if the record has the specified attribute and the values match
+            if attr in record and record[attr] == value:
+                continue
+            else:
+                return False
+        elif "LIKE" in cond:
+            # Handling LIKE condition
+            attr, pattern = cond.split("LIKE")
+            attr = attr.strip()
+            pattern = pattern.strip()
+
+            # Check if the record has the specified attribute and it matches the pattern
+            if attr in record and pattern in record[attr]:
+                continue
+            else:
+                return False
+        else:
+            # Unsupported condition
+            return False
+
+    return True
+
+
 def insert_into_indexes(table_name, value_dict, prim_key, prim_key_attributes, non_primary_attributes):
     data = open_file()
     db = client[used_database]
@@ -735,98 +770,45 @@ def select(statement):
                 db = client[used_database]
                 collection = db[statement[2]]
                 if len(statement) == 3:
-                    attributes = collection.find_one().keys()
+                    # attributes = collection.find_one().keys()
+                    # t = PrettyTable(attributes)
+                    attributes = []
+                    for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
+                        attributes.append(str["attributeName"])
                     t = PrettyTable(attributes)
                     cursor = collection.find()
                     for value in cursor:
-                        t.add_row([value[attr] for attr in attributes])
-                    msg = str(t)
+                        values = []
+                        values.append(value['key'])
+                        for val in value['values'].split('#'):
+                            values.append(val)
+                        t.add_row(values)
+                    msg = t.get_string()
                     serverSocket.sendto(msg.encode(), address)
-                    # for key in r.keys(used_database + ':' + statement[2] + ':*'):
-                    #     values = []
-                    #     values.append(key.decode().split(':')[2])
-                    #     values += r.get(key).decode().split('#')
-                    #     t.add_row(values)
-                    # sFile = open("databases/select.txt", 'w')
-                    # sFile.write(t.get_string())
-                    # sFile.close()
-                    # serverSocket.sendto("SELECT".encode(), address)
-                # if len(statement) > 3:
-                #     attributes = []
-                #     selection = []
-                #     select_type = statement[0].lower()
-                #     table = statement[2]
-                #     for str in data["databases"][used_database]["tables"][table]["structure"]:
-                #         attributes.append(str["attributeName"])
-                #     t = PrettyTable(attributes)
-                #     statement = statement[4:]
-                #     if "and" in statement:
-                #         statement.pop(1)
-                #     index = data["databases"][used_database]["tables"][table]["indexFiles"]
-                #     arg_attributes = []
-                #     arg_values = []
-                #     indexes = []
-                #     for s in statement:
-                #         arg_attributes.append(s.split("=")[0])
-                #         arg_values.append(s.split("=")[1])
-                #     for inx in index:
-                #         l = []
-                #         for ind in inx['indexAttributes']:
-                #             l.append(ind["attributeName"])
-                #         indexes.append(l)
-                #     for i in indexes:
-                #         if set(i).issubset(set(arg_attributes)):
-                #             statement_values = ""
-                #             for at in i:
-                #                 x = arg_attributes.index(at)
-                #                 statement_values += arg_values[x] + ":"
-                #             statement_values = statement_values[:-1]
-                #             i_key = r.keys("*:" + used_database + ":" + table + ":" + statement_values)[0].decode()
-                #             i_values = r.get(i_key).decode().split("#")
-                #             for val in i_values:
-                #                 l = []
-                #                 obj = r.get(used_database + ":" + table + ":" + val).decode().split("#")
-                #                 l.append(val)
-                #                 for o in obj:
-                #                     l.append(o)
-                #                 selection.append(l)
-                #             arg_attributes = list(set(arg_attributes) - set(i))
-                #     print(arg_attributes)
-                #     if len(arg_attributes) > 0:
-                #         print(selection)
-                #         if selection == []:
-                #             keys = r.keys(used_database + ":" + table + ":*")
-                #             for k in keys:
-                #                 l = []
-                #                 l.append(k.decode().split(":")[-1])
-                #                 obj = r.get(k.decode()).decode().split("#")
-                #                 for o in obj:
-                #                     l.append(o)
-                #                 selection.append(l)
-                #         for arg in arg_attributes:
-                #             ind = attributes.index(arg)
-                #             val = arg_values[arg_attributes.index(arg)]
-                #             selection = filter(lambda item: item[ind] == val, selection)
-                #     copy = []
-                #     if select_type == "distinct":
-                #         for s in selection:
-                #             if r.get(used_database + ":" + table + ":" + s[0]).decode() not in copy:
-                #                 copy.append(r.get(used_database + ":" + table + ":" + s[0]).decode())
-                #                 t.add_row(s)
-                #     else:
-                #         for s in selection:
-                #             t.add_row(s)
-                #     sFile = open("databases/select.txt", 'w')
-                #     sFile.write(t.get_string())
-                #     sFile.close()
-                #     serverSocket.sendto("SELECT".encode(), address)
+                elif len(statement) > 3 and statement[3].lower() == "where":
+                    # SELECT * FROM table WHERE condition
+                    condition_index = statement.index("where") + 1
+                    conditions = " ".join(statement[condition_index:])
+                    cursor = collection.find()
+
+                    # Filter records based on conditions
+                    filtered_records = [record for record in cursor if evaluate_condition(record, conditions)]
+
+                    if filtered_records:
+                        # Display the filtered records
+                        attributes = filtered_records[0].keys()
+                        t = PrettyTable(attributes)
+                        for record in filtered_records:
+                            t.add_row([record[attr] for attr in attributes])
+                        msg = str(t)
+                        serverSocket.sendto(msg.encode(), address)
+
             else:
                 msg = "TABLE DOES NOT EXIST"
                 serverSocket.sendto(msg.encode(), address)
         else:
             msg = "DATABASE DOES NOT EXIST"
             serverSocket.sendto(msg.encode(), address)
-
 
 
 
