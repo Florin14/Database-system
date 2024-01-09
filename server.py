@@ -1,8 +1,9 @@
 import json
 import re
 import socket
-from prettytable import PrettyTable
+
 import pymongo
+from prettytable import PrettyTable
 
 ip_address = "127.0.0.1"
 port = 9999
@@ -26,6 +27,23 @@ def open_file(json_file_name="Catalog.json"):
 def write_json(json_database):
     with open('Catalog.json', 'w') as f:
         json.dump(json_database, f, indent=4)
+
+
+def get_prefix(base_string, target_string):
+    index = base_string.find(target_string)
+    if index != -1:
+        return base_string[:index]
+    else:
+        return None
+
+
+def keep_items(lst, num_appearances):
+    item_counts = {}
+    for item in lst:
+        item_counts[item] = item_counts.get(item, 0) + 1
+
+    filtered_list = [item for item, count in item_counts.items() if count == num_appearances]
+    return filtered_list
 
 
 def check_primary_or_unique_key(attribute_name, attributes_list):
@@ -77,6 +95,7 @@ def create_table_indexes(table_name, nonuniqueKeys, uniqueKeys, primaryKey):
     # msg = "CREATED INDEXES {} FOR TABLE {}".format(new_create_indexes, table_name)
     # serverSocket.sendto(msg.encode(), address)
     # collection.create_index([(uniq_key, pymongo.ASCENDING)], unique=True, name=index_name)
+
 
 def get_index_fields(fields):
     return []
@@ -582,7 +601,9 @@ def insert(statement):
 
                 if check_primary_key_uniqueness(collection, 'key', primary_key_value):
                     collection.insert_one(mongo_document)
-                    insert_into_indexes(table_name, value_dict, primary_key_value, [attr["attributeName"] for attr in primary_key_attributes], non_primary_attributes)
+                    insert_into_indexes(table_name, value_dict, primary_key_value,
+                                        [attr["attributeName"] for attr in primary_key_attributes],
+                                        non_primary_attributes)
                     msg = f"Values inserted into table {table_name}."
                     serverSocket.sendto(msg.encode(), address)
                 else:
@@ -757,59 +778,157 @@ def delete(statement):
         serverSocket.sendto(msg.encode(), address)
 
 
-
 def select(statement):
     data = open_file()
     global used_database
-    if ((statement[0].lower() != "*") and (statement[0].lower() != "distinct")) or (statement[1].lower() != "from"):
+    if (statement[1].lower() != "from"):
         serverSocket.sendto("INVALID SELECT COMMAND".encode(), address)
     else:
         if used_database:
-            table = data["databases"][used_database]["tables"].get(statement[2], None)
+            table_name = statement[2]
+            table = data["databases"][used_database]["tables"].get(table_name, None)
+            primary_key = table["primaryKey"]
+            primary_key_list = [obj["attributeName"] for obj in primary_key]
+            concatenated_values = "_".join(primary_key_list)
+            primary_key_index_name = concatenated_values + "_" + table_name + "_uniq_index"
+
             if table:
                 db = client[used_database]
-                collection = db[statement[2]]
-                if len(statement) == 3:
-                    # attributes = collection.find_one().keys()
-                    # t = PrettyTable(attributes)
-                    attributes = []
+                collection = db[primary_key_index_name]
+                index_information = db[table_name].index_information()
+                indexes = [key for key in index_information.keys()]
+
+                # Determine columns to select
+                columns_to_select = []
+                if statement[0].lower() == "*":
+                    # Select all columns
                     for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
-                        attributes.append(str["attributeName"])
-                    t = PrettyTable(attributes)
-                    cursor = collection.find()
+                        columns_to_select.append(str["attributeName"])
+
+                    t = PrettyTable(columns_to_select)
+                    if "where" in statement:
+                        where_index = statement.index("where") + 1
+                        conditions = statement[where_index:]
+
+                        # Parse the conditions into a dictionary for MongoDB query
+                        query_conditions = {}
+                        conditions_keys = [cond.split('=')[0] for cond in conditions]
+                        primary_keys_list_after_conditions = []
+                        for condition in conditions:
+
+                            if condition.lower() != 'and':
+                                column, value_condition = condition.split('=')
+                                query_conditions[column.strip()] = value_condition.strip()
+                                if column not in columns_to_select:
+                                    msg = "COLUMN IN WHERE CONDITION DOESN'T EXIST"
+                                    serverSocket.sendto(msg.encode(), address)
+                                    return
+                                if sorted(primary_key_list) != sorted(conditions_keys) and not all(
+                                        elem in conditions_keys for elem in primary_key_list):
+                                    for index in indexes:
+                                        res_index = get_prefix(index, table_name)
+                                        if res_index and res_index[:-1] == column:
+                                            collection_index = db[index]
+                                            cursor = collection_index.find()
+                                            for value in cursor:
+                                                if value['key'] == value_condition:
+                                                    for elem in value['values'].split('#'):
+                                                        primary_keys_list_after_conditions.append(elem)
+
+                        cursor = collection.find()
+                        final_values = []
+                        columns = [item for item in columns_to_select if item not in primary_key_list]
+                        for value in cursor:
+                            row = {}
+                            if len(primary_key_list) == 1:
+                                row[primary_key_list[0]] = value['key']
+                            else:
+                                pass
+
+                            values = value['values'].split('#')
+                            index = 0
+                            for col in columns:
+                                row[col] = values[index]
+                                index += 1
+                            final_values.append(row)
+                        if len(primary_keys_list_after_conditions) > 0:
+                            new_conditions = conditions
+                            new_conditions.remove('and')
+                            number_of_conditions = len(new_conditions)
+                            filtered_list = [obj for obj in final_values if
+                                             obj[primary_key_list[0]] in keep_items(primary_keys_list_after_conditions,
+                                                                                    number_of_conditions)]
+                        else:
+                            filtered_list = [obj for obj in final_values if
+                                             all(obj[key] == value for key, value in query_conditions.items())]
+                        for result in filtered_list:
+                            t.add_row([obj for obj in result.values()])
+                    else:
+                        cursor = collection.find()
+
                     for value in cursor:
                         values = []
                         values.append(value['key'])
                         for val in value['values'].split('#'):
                             values.append(val)
                         t.add_row(values)
-                    msg = t.get_string()
-                    serverSocket.sendto(msg.encode(), address)
-                elif len(statement) > 3 and statement[3].lower() == "where":
-                    # SELECT * FROM table WHERE condition
-                    condition_index = statement.index("where") + 1
-                    conditions = " ".join(statement[condition_index:])
-                    cursor = collection.find()
+                else:
+                    # Select specified columns
+                    columns_to_select = statement[0].replace(" ", "").split(',')
 
-                    # Filter records based on conditions
-                    filtered_records = [record for record in cursor if evaluate_condition(record, conditions)]
+                    print("h to select:", columns_to_select)  # Debugging print
 
-                    if filtered_records:
-                        # Display the filtered records
-                        attributes = filtered_records[0].keys()
-                        t = PrettyTable(attributes)
-                        for record in filtered_records:
-                            t.add_row([record[attr] for attr in attributes])
-                        msg = str(t)
-                        serverSocket.sendto(msg.encode(), address)
+                    t = PrettyTable(columns_to_select)
+                    if "where" in statement:
+                        where_index = statement.index("where") + 1
+                        conditions = statement[where_index:]
 
+                        # Parse the conditions into a dictionary for MongoDB query
+                        query_conditions = {}
+                        for condition in conditions:
+                            if condition.lower() != 'and':
+                                column, value = condition.split('=')
+                                query_conditions[column.strip()] = value.strip()
+
+                        # Use the index to filter the collection
+                        cursor = collection.find(query_conditions)
+                    else:
+                        # If no WHERE conditions, retrieve all documents
+                        cursor = collection.find()
+                    # Assuming 'columns_to_select' contains the list of columns to be selected
+                    # and 'column_names' contains the list of all column names in the table
+                    column_names = []
+                    for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
+                        column_names.append(str["attributeName"])
+
+                    for value in cursor:
+                        row_values = []
+
+                        # Splitting the values in the row
+                        split_values = [value['key']] + value['values'].split('#')
+
+                        # Iterate over all columns and add value if the column is in columns_to_select
+                        for index, col_name in enumerate(column_names):
+                            if col_name in columns_to_select:
+                                # Add the corresponding value from split_values to row_values
+                                # Ensure there are enough split values to match the index
+                                if index < len(split_values):
+                                    row_values.append(split_values[index])
+                                else:
+                                    row_values.append('N/A')  # In case the value is missing for this column
+
+                        t.add_row(row_values)
+
+                msg = t.get_string()
+                serverSocket.sendto(msg.encode(), address)
+
+                # ... (rest of your existing code for handling WHERE conditions)
             else:
                 msg = "TABLE DOES NOT EXIST"
                 serverSocket.sendto(msg.encode(), address)
         else:
             msg = "DATABASE DOES NOT EXIST"
             serverSocket.sendto(msg.encode(), address)
-
 
 
 print("Server Up")
