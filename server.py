@@ -97,8 +97,15 @@ def create_table_indexes(table_name, nonuniqueKeys, uniqueKeys, primaryKey):
     # collection.create_index([(uniq_key, pymongo.ASCENDING)], unique=True, name=index_name)
 
 
-def get_index_fields(fields):
-    return []
+def has_distinct_substring(input_string):
+    # Define a regular expression pattern to match "distinct" without characters around it
+    pattern = r'\bdistinct\b'
+
+    # Use re.search to find the pattern in the input string
+    match = re.search(pattern, input_string, flags=re.IGNORECASE)
+
+    # Return True if the pattern is found, otherwise False
+    return bool(match)
 
 
 def evaluate_condition(record, condition):
@@ -778,6 +785,23 @@ def delete(statement):
         serverSocket.sendto(msg.encode(), address)
 
 
+integer_operator_mapping = {
+    '=': lambda x, y: int(x) == int(y),
+    '>=': lambda x, y: int(x) >= int(y),
+    '>': lambda x, y: int(x) > int(y),
+    '<=': lambda x, y: int(x) <= int(y),
+    '<': lambda x, y: int(x) < int(y),
+}
+
+operator_mapping = {
+    '=': lambda x, y: x == y,
+    '>=': lambda x, y: x >= y,
+    '>': lambda x, y: x > y,
+    '<=': lambda x, y: x <= y,
+    '<': lambda x, y: x < y,
+}
+
+
 def select(statement):
     data = open_file()
     global used_database
@@ -800,26 +824,74 @@ def select(statement):
 
                 # Determine columns to select
                 columns_to_select = []
+                columns_type = {}
+                for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
+                    columns_to_select.append(str["attributeName"])
+                    columns_type[str["attributeName"]] = str["type"]
                 if statement[0].lower() == "*":
-                    # Select all columns
-                    for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
-                        columns_to_select.append(str["attributeName"])
-
                     t = PrettyTable(columns_to_select)
                     if "where" in statement:
                         where_index = statement.index("where") + 1
                         conditions = statement[where_index:]
 
                         # Parse the conditions into a dictionary for MongoDB query
-                        query_conditions = {}
-                        conditions_keys = [cond.split('=')[0] for cond in conditions]
+                        query_conditions = []
+
+                        conditions_keys = []
+                        for cond in conditions:
+                            if cond.find("<=") > 0:
+                                conditions_keys.append(cond.split('<=')[0])
+                            elif cond.find(">=") > 0:
+                                conditions_keys.append(cond.split('>=')[0])
+                            elif cond.find(">") > 0:
+                                conditions_keys.append(cond.split('>')[0])
+                            elif cond.find("<") > 0:
+                                conditions_keys.append(cond.split('<')[0])
+                            elif cond.find("=") > 0:
+                                conditions_keys.append(cond.split('=')[0])
+
                         primary_keys_list_after_conditions = []
                         for condition in conditions:
-
                             if condition.lower() != 'and':
-                                column, value_condition = condition.split('=')
-                                query_conditions[column.strip()] = value_condition.strip()
-                                if column not in columns_to_select:
+                                # column, value_condition = condition.split('=')
+                                # query_conditions[column.strip()] = value_condition.strip()
+
+                                column_key = None
+
+                                condition_obj = {}
+                                if condition.find("<=") > 0:
+                                    column_key = condition.split('<=')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '<='
+                                    condition_obj["value"] = condition.split('<=')[2]
+                                    conditions_keys.append(column_key)
+                                elif condition.find(">=") > 0:
+                                    column_key = condition.split('>=')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '>='
+                                    condition_obj["value"] = condition.split('>=')[1]
+                                    conditions_keys.append(column_key)
+                                elif condition.find(">") > 0:
+                                    column_key = condition.split('>')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '>'
+                                    condition_obj["value"] = condition.split('>')[1]
+                                    conditions_keys.append(column_key)
+                                elif condition.find("<") > 0:
+                                    column_key = condition.split('<')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '<'
+                                    condition_obj["value"] = condition.split('<')[1]
+                                    conditions_keys.append(column_key)
+                                elif condition.find("=") > 0:
+                                    column_key = condition.split('=')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '='
+                                    condition_obj["value"] = condition.split('=')[1]
+                                    conditions_keys.append(column_key)
+                                query_conditions.append(condition_obj)
+
+                                if column_key and column_key not in columns_to_select:
                                     msg = "COLUMN IN WHERE CONDITION DOESN'T EXIST"
                                     serverSocket.sendto(msg.encode(), address)
                                     return
@@ -827,13 +899,23 @@ def select(statement):
                                         elem in conditions_keys for elem in primary_key_list):
                                     for index in indexes:
                                         res_index = get_prefix(index, table_name)
-                                        if res_index and res_index[:-1] == column:
+                                        if res_index and res_index[:-1] == condition_obj["key"]:
                                             collection_index = db[index]
                                             cursor = collection_index.find()
                                             for value in cursor:
-                                                if value['key'] == value_condition:
-                                                    for elem in value['values'].split('#'):
-                                                        primary_keys_list_after_conditions.append(elem)
+                                                if columns_type[column_key] == 'int':
+                                                    if integer_operator_mapping[condition_obj['operator']](value['key'],
+                                                                                                           condition_obj[
+                                                                                                               'value']):
+                                                        for elem in value['values'].split('#'):
+                                                            primary_keys_list_after_conditions.append(elem)
+                                                elif columns_type[column_key] == 'varchar':
+
+                                                    if operator_mapping[condition_obj['operator']](value['key'],
+                                                                                                   condition_obj[
+                                                                                                       'value']):
+                                                        for elem in value['values'].split('#'):
+                                                            primary_keys_list_after_conditions.append(elem)
 
                         cursor = collection.find()
                         final_values = []
@@ -853,14 +935,26 @@ def select(statement):
                             final_values.append(row)
                         if len(primary_keys_list_after_conditions) > 0:
                             new_conditions = conditions
-                            new_conditions.remove('and')
+                            if 'and' in conditions:
+                                new_conditions.remove('and')
                             number_of_conditions = len(new_conditions)
                             filtered_list = [obj for obj in final_values if
                                              obj[primary_key_list[0]] in keep_items(primary_keys_list_after_conditions,
                                                                                     number_of_conditions)]
                         else:
-                            filtered_list = [obj for obj in final_values if
-                                             all(obj[key] == value for key, value in query_conditions.items())]
+
+                            filtered_list = []
+                            for obj in final_values:
+                                conditions_met = all(
+                                    (integer_operator_mapping[cond['operator']] if columns_type[
+                                                                                       cond['key']] == 'int' else
+                                     operator_mapping[cond['operator']])(obj[cond['key']], cond['value'])
+                                    for cond in query_conditions
+                                )
+
+                                if conditions_met:
+                                    filtered_list.append(obj)
+
                         for result in filtered_list:
                             t.add_row([obj for obj in result.values()])
                     else:
@@ -872,52 +966,195 @@ def select(statement):
                         for val in value['values'].split('#'):
                             values.append(val)
                         t.add_row(values)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
                 else:
-                    # Select specified columns
-                    columns_to_select = statement[0].replace(" ", "").split(',')
 
-                    print("h to select:", columns_to_select)  # Debugging print
+                    columns_to_select2 = statement[0].replace(" ", "").split(',')
 
-                    t = PrettyTable(columns_to_select)
+                    print("h to select:", columns_to_select2)  # Debugging print
+
+                    t = PrettyTable(columns_to_select2)
                     if "where" in statement:
                         where_index = statement.index("where") + 1
                         conditions = statement[where_index:]
 
                         # Parse the conditions into a dictionary for MongoDB query
-                        query_conditions = {}
+                        # query_conditions = {}
+
+                        query_conditions = []
+
+                        conditions_keys = []
+                        for cond in conditions:
+                            if cond.find("<=") > 0:
+                                conditions_keys.append(cond.split('<=')[0])
+                            elif cond.find(">=") > 0:
+                                conditions_keys.append(cond.split('>=')[0])
+                            elif cond.find(">") > 0:
+                                conditions_keys.append(cond.split('>')[0])
+                            elif cond.find("<") > 0:
+                                conditions_keys.append(cond.split('<')[0])
+                            elif cond.find("=") > 0:
+                                conditions_keys.append(cond.split('=')[0])
+
+                        primary_keys_list_after_conditions = []
                         for condition in conditions:
                             if condition.lower() != 'and':
-                                column, value = condition.split('=')
-                                query_conditions[column.strip()] = value.strip()
+                                # column, value = condition.split('=')
+                                # query_conditions[column.strip()] = value.strip()
+
+                                column_key = None
+
+                                condition_obj = {}
+                                if condition.find("<=") > 0:
+                                    column_key = condition.split('<=')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '<='
+                                    condition_obj["value"] = condition.split('<=')[2]
+                                    conditions_keys.append(column_key)
+                                elif condition.find(">=") > 0:
+                                    column_key = condition.split('>=')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '>='
+                                    condition_obj["value"] = condition.split('>=')[1]
+                                    conditions_keys.append(column_key)
+                                elif condition.find(">") > 0:
+                                    column_key = condition.split('>')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '>'
+                                    condition_obj["value"] = condition.split('>')[1]
+                                    conditions_keys.append(column_key)
+                                elif condition.find("<") > 0:
+                                    column_key = condition.split('<')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '<'
+                                    condition_obj["value"] = condition.split('<')[1]
+                                    conditions_keys.append(column_key)
+                                elif condition.find("=") > 0:
+                                    column_key = condition.split('=')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '='
+                                    condition_obj["value"] = condition.split('=')[1]
+                                    conditions_keys.append(column_key)
+                                query_conditions.append(condition_obj)
+
+                                if column_key and column_key not in columns_to_select:
+                                    msg = "COLUMN IN WHERE CONDITION DOESN'T EXIST"
+                                    serverSocket.sendto(msg.encode(), address)
+                                    return
+
+
+                                if sorted(primary_key_list) != sorted(conditions_keys) and not all(
+                                        elem in conditions_keys for elem in primary_key_list):
+                                    for index in indexes:
+                                        res_index = get_prefix(index, table_name)
+                                        if res_index and res_index[:-1] == condition_obj["key"]:
+                                            collection_index = db[index]
+                                            cursor = collection_index.find()
+                                            for value in cursor:
+                                                if columns_type[column_key] == 'int':
+                                                    if integer_operator_mapping[condition_obj['operator']](value['key'],
+                                                                                                           condition_obj[
+                                                                                                               'value']):
+                                                        for elem in value['values'].split('#'):
+                                                            primary_keys_list_after_conditions.append(elem)
+                                                elif columns_type[column_key] == 'varchar':
+
+                                                    if operator_mapping[condition_obj['operator']](value['key'],
+                                                                                                   condition_obj[
+                                                                                                       'value']):
+                                                        for elem in value['values'].split('#'):
+                                                            primary_keys_list_after_conditions.append(elem)
+
+                            cursor = collection.find()
+                            final_values = []
+                            columns = [item for item in columns_to_select if item not in primary_key_list]
+                            for value in cursor:
+                                row = {}
+                                if len(primary_key_list) == 1:
+                                    row[primary_key_list[0]] = value['key']
+                                else:
+                                    pass
+
+                                values = value['values'].split('#')
+                                index = 0
+                                for col in columns:
+                                    row[col] = values[index]
+                                    index += 1
+                                final_values.append(row)
+                            if len(primary_keys_list_after_conditions) > 0:
+                                new_conditions = conditions
+                                if 'and' in conditions:
+                                    new_conditions.remove('and')
+                                number_of_conditions = len(new_conditions)
+                                filtered_list = []
+                                for obj in final_values:
+                                    if obj[primary_key_list[0]] in keep_items(
+                                            primary_keys_list_after_conditions,
+                                            number_of_conditions):
+                                        filtered_list.append(obj)
+                            else:
+
+                                filtered_list = []
+                                for obj in final_values:
+                                    conditions_met = all(
+                                        (integer_operator_mapping[cond['operator']] if columns_type[
+                                                                                           cond['key']] == 'int' else
+                                         operator_mapping[cond['operator']])(obj[cond['key']], cond['value'])
+                                        for cond in query_conditions
+                                    )
+
+                                    if conditions_met:
+                                        filtered_list.append(obj)
+
+                            for result in filtered_list:
+                                row = []
+                                for key, value in result.items():
+                                    if key in columns_to_select2:
+                                        row.append(value)
+                                t.add_row(row)
 
                         # Use the index to filter the collection
-                        cursor = collection.find(query_conditions)
+                        # cursor = collection.find(query_conditions)
                     else:
                         # If no WHERE conditions, retrieve all documents
                         cursor = collection.find()
                     # Assuming 'columns_to_select' contains the list of columns to be selected
                     # and 'column_names' contains the list of all column names in the table
-                    column_names = []
-                    for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
-                        column_names.append(str["attributeName"])
+                        column_names = []
+                        for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
+                            column_names.append(str["attributeName"])
 
-                    for value in cursor:
-                        row_values = []
+                        for value in cursor:
+                            row_values = []
 
-                        # Splitting the values in the row
-                        split_values = [value['key']] + value['values'].split('#')
+                            # Splitting the values in the row
+                            split_values = [value['key']] + value['values'].split('#')
 
-                        # Iterate over all columns and add value if the column is in columns_to_select
-                        for index, col_name in enumerate(column_names):
-                            if col_name in columns_to_select:
-                                # Add the corresponding value from split_values to row_values
-                                # Ensure there are enough split values to match the index
-                                if index < len(split_values):
-                                    row_values.append(split_values[index])
-                                else:
-                                    row_values.append('N/A')  # In case the value is missing for this column
+                            # Iterate over all columns and add value if the column is in columns_to_select
+                            for index, col_name in enumerate(column_names):
+                                if col_name in columns_to_select2:
+                                    # Add the corresponding value from split_values to row_values
+                                    # Ensure there are enough split values to match the index
+                                    if index < len(split_values):
+                                        row_values.append(split_values[index])
+                                    else:
+                                        row_values.append('N/A')  # In case the value is missing for this column
 
-                        t.add_row(row_values)
+                            t.add_row(row_values)
 
                 msg = t.get_string()
                 serverSocket.sendto(msg.encode(), address)
