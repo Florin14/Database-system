@@ -1,4 +1,6 @@
+import datetime
 import json
+import random
 import re
 import socket
 
@@ -787,6 +789,7 @@ def delete(statement):
 
 integer_operator_mapping = {
     '=': lambda x, y: int(x) == int(y),
+    '<>': lambda x, y: int(x) != int(y),
     '>=': lambda x, y: int(x) >= int(y),
     '>': lambda x, y: int(x) > int(y),
     '<=': lambda x, y: int(x) <= int(y),
@@ -795,6 +798,7 @@ integer_operator_mapping = {
 
 operator_mapping = {
     '=': lambda x, y: x == y,
+    '<>': lambda x, y: x != y,
     '>=': lambda x, y: x >= y,
     '>': lambda x, y: x > y,
     '<=': lambda x, y: x <= y,
@@ -802,14 +806,57 @@ operator_mapping = {
 }
 
 
+def get_next_element(lst, item):
+    try:
+        # Find the index of the given item in the list
+        index = lst.index(item)
+
+        # Return the element after the specified item
+        return lst[index + 1]
+
+    except ValueError:
+        # If the item is not found in the list, return None or any default value you prefer
+        return None
+
+
+def get_distinct_sublist(input_list):
+    sublist = []
+    for item in input_list:
+        sublist.append(item)
+        if item == 'from':
+            sublist.pop()
+            break
+    return sublist
+
+
+def parse_distinct_columns(statement):
+    columns_to_select = []
+    distinct_columns = []
+    is_after_distinct = False
+    for state in statement:
+        for s in state.split(','):
+            if s.lower() != 'distinct':
+                if s != '':
+                    if is_after_distinct:
+                        for st in s.split(','):
+                            columns_to_select.append(st)
+                            distinct_columns.append(st)
+                    else:
+                        for st in s.split(','):
+                            columns_to_select.append(st)
+            else:
+                is_after_distinct = True
+    return columns_to_select, distinct_columns
+
+
 def select(statement):
     data = open_file()
     global used_database
-    if (statement[1].lower() != "from"):
+    if "from" not in statement:
         serverSocket.sendto("INVALID SELECT COMMAND".encode(), address)
     else:
         if used_database:
-            table_name = statement[2]
+            table_name = get_next_element(statement, 'from')
             table = data["databases"][used_database]["tables"].get(table_name, None)
             primary_key = table["primaryKey"]
             primary_key_list = [obj["attributeName"] for obj in primary_key]
@@ -825,7 +872,7 @@ def select(statement):
                 # Determine columns to select
                 columns_to_select = []
                 columns_type = {}
-                for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
+                for str in data["databases"][used_database]["tables"][table_name]["structure"]:
                     columns_to_select.append(str["attributeName"])
                     columns_type[str["attributeName"]] = str["type"]
                 if statement[0].lower() == "*":
@@ -841,6 +888,8 @@ def select(statement):
                         for cond in conditions:
                             if cond.find("<=") > 0:
                                 conditions_keys.append(cond.split('<=')[0])
+                            elif cond.find("<>") > 0:
+                                conditions_keys.append(cond.split('<>')[0])
                             elif cond.find(">=") > 0:
                                 conditions_keys.append(cond.split('>=')[0])
                             elif cond.find(">") > 0:
@@ -864,6 +913,12 @@ def select(statement):
                                     condition_obj["key"] = column_key
                                     condition_obj["operator"] = '<='
                                     condition_obj["value"] = condition.split('<=')[2]
+                                    conditions_keys.append(column_key)
+                                elif condition.find("<>") > 0:
+                                    column_key = condition.split('<>')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '<>'
+                                    condition_obj["value"] = condition.split('<>')[1]
                                     conditions_keys.append(column_key)
                                 elif condition.find(">=") > 0:
                                     column_key = condition.split('>=')[0]
@@ -966,24 +1021,13 @@ def select(statement):
                         for val in value['values'].split('#'):
                             values.append(val)
                         t.add_row(values)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                 else:
+                    distinct_columns = []
 
-                    columns_to_select2 = statement[0].replace(" ", "").split(',')
+                    if 'distinct' in [col.lower() for col in statement]:
+                        columns_to_select2, distinct_columns = parse_distinct_columns(get_distinct_sublist(statement))
+                    else:
+                        columns_to_select2 = statement[0].replace(" ", "").split(',')
 
                     print("h to select:", columns_to_select2)  # Debugging print
 
@@ -1001,6 +1045,8 @@ def select(statement):
                         for cond in conditions:
                             if cond.find("<=") > 0:
                                 conditions_keys.append(cond.split('<=')[0])
+                            elif cond.find("<>") > 0:
+                                conditions_keys.append(cond.split('<>')[0])
                             elif cond.find(">=") > 0:
                                 conditions_keys.append(cond.split('>=')[0])
                             elif cond.find(">") > 0:
@@ -1024,6 +1070,12 @@ def select(statement):
                                     condition_obj["key"] = column_key
                                     condition_obj["operator"] = '<='
                                     condition_obj["value"] = condition.split('<=')[2]
+                                    conditions_keys.append(column_key)
+                                elif condition.find("<>") > 0:
+                                    column_key = condition.split('<>')[0]
+                                    condition_obj["key"] = column_key
+                                    condition_obj["operator"] = '<>'
+                                    condition_obj["value"] = condition.split('<>')[1]
                                     conditions_keys.append(column_key)
                                 elif condition.find(">=") > 0:
                                     column_key = condition.split('>=')[0]
@@ -1055,7 +1107,6 @@ def select(statement):
                                     msg = "COLUMN IN WHERE CONDITION DOESN'T EXIST"
                                     serverSocket.sendto(msg.encode(), address)
                                     return
-
 
                                 if sorted(primary_key_list) != sorted(conditions_keys) and not all(
                                         elem in conditions_keys for elem in primary_key_list):
@@ -1132,29 +1183,64 @@ def select(statement):
                     else:
                         # If no WHERE conditions, retrieve all documents
                         cursor = collection.find()
-                    # Assuming 'columns_to_select' contains the list of columns to be selected
-                    # and 'column_names' contains the list of all column names in the table
+                        # Assuming 'columns_to_select' contains the list of columns to be selected
+                        # and 'column_names' contains the list of all column names in the table
                         column_names = []
-                        for str in data["databases"][used_database]["tables"][statement[2]]["structure"]:
+                        for str in data["databases"][used_database]["tables"][table_name]["structure"]:
                             column_names.append(str["attributeName"])
 
-                        for value in cursor:
-                            row_values = []
+                        if len(distinct_columns) == 0:
+                            for value in cursor:
+                                row_values = []
 
-                            # Splitting the values in the row
-                            split_values = [value['key']] + value['values'].split('#')
+                                # Splitting the values in the row
+                                split_values = [value['key']] + value['values'].split('#')
 
-                            # Iterate over all columns and add value if the column is in columns_to_select
-                            for index, col_name in enumerate(column_names):
-                                if col_name in columns_to_select2:
+                                # Iterate over all columns and add value if the column is in columns_to_select
+                                for index, col_name in enumerate(column_names):
+                                    if col_name in columns_to_select2:
+                                        # Add the corresponding value from split_values to row_values
+                                        # Ensure there are enough split values to match the index
+                                        if index < len(split_values):
+                                            row_values.append(split_values[index])
+                                        else:
+                                            row_values.append('N/A')  # In case the value is missing for this column
+
+                                t.add_row(row_values)
+                        else:
+                            columns_distinct_to_compare = []
+                            final_values = []
+                            for value in cursor:
+                                split_values = [value['key']] + value['values'].split('#')
+
+                                row = {}
+                                for index, col_name in enumerate(column_names):
+                                    if col_name in distinct_columns:
+                                        if index < len(split_values):
+                                            row[col_name] = split_values[index]
+
+                                if [row[key] for key in distinct_columns] not in columns_distinct_to_compare:
+                                    final_values.append(value)
+                                    columns_distinct_to_compare.append([row[key] for key in distinct_columns])
+                            # nu se pune in obiect ok, trebuie gasit indexul pentru cheile care trebuie sa apara (din columns_to_select2)
+                            for value in final_values:
+                                row_values = []
+
+                                # Splitting the values in the row
+                                split_values = [value['key']] + value['values'].split('#')
+
+                                # Iterate over all columns and add value if the column is in columns_to_select
+                                # for col_name in column_names:
+                                for col_name2 in columns_to_select2:
+                                    ind = column_names.index(col_name2)
                                     # Add the corresponding value from split_values to row_values
                                     # Ensure there are enough split values to match the index
-                                    if index < len(split_values):
-                                        row_values.append(split_values[index])
+                                    if ind < len(split_values):
+                                        row_values.append(split_values[ind])
                                     else:
                                         row_values.append('N/A')  # In case the value is missing for this column
 
-                            t.add_row(row_values)
+                                t.add_row(row_values)
 
                 msg = t.get_string()
                 serverSocket.sendto(msg.encode(), address)
@@ -1168,6 +1254,119 @@ def select(statement):
             serverSocket.sendto(msg.encode(), address)
 
 
+def insert_sequential(statement):
+    global used_database, serverSocket, client, address
+    data = open_file()
+
+    if (statement[0].lower() != "into") or (len(statement) < 3):
+        serverSocket.sendto("INVALID INSERT COMMAND".encode(), address)
+    else:
+        if used_database:
+            table_name = statement[1]
+            values_str = ' '.join(statement[3:])
+
+            # Split values using both commas and spaces as delimiters
+            values = re.split(r'[,\s]+', values_str.strip())
+            values = [v.strip() for v in values if v.strip() != ');' and v.strip() != ')' and v.strip() != '(']
+
+            table_structure = data["databases"][used_database]["tables"][table_name]["structure"]
+            value_dict = {table_structure[i]["attributeName"]: values[i] for i in range(len(values))}
+
+            if table_name in data["databases"][used_database]["tables"]:
+                table_structure = data["databases"][used_database]["tables"][table_name]["structure"]
+                primary_key_attributes = data["databases"][used_database]["tables"][table_name]["primaryKey"]
+
+                if len(values) != len(table_structure):
+                    msg = "Number of values does not match the table structure."
+                    serverSocket.sendto(msg.encode(), address)
+                    return
+
+                non_primary_values = []  # List to hold all non-primary attributes
+                primary_key_value = None  # Variable to hold the primary key value
+
+                for i in range(len(table_structure)):
+                    attribute_name = table_structure[i]["attributeName"]
+                    attribute_type = table_structure[i]["type"]
+                    is_primary_key = any(attr["attributeName"] == attribute_name for attr in primary_key_attributes)
+                    value = values[i]
+
+                    if attribute_type == "int":
+                        try:
+                            value = int(value)
+                        except ValueError:
+                            msg = f"Invalid value '{value}' for attribute '{attribute_name}'."
+                            serverSocket.sendto(msg.encode(), address)
+                            return
+
+                    if is_primary_key:
+                        if primary_key_value is None:
+                            primary_key_value = str(value)
+                        else:
+                            primary_key_value += f'${value}'
+                    else:
+                        non_primary_values.append(str(value))
+
+                if primary_key_value is None:
+                    msg = "Primary key value not found."
+                    serverSocket.sendto(msg.encode(), address)
+                    return
+
+                # Concatenate non-primary key attributes
+                non_primary_attributes = '#'.join(non_primary_values)
+                foreign_keys = data["databases"][used_database]["tables"][table_name].get("foreignKeys", [])
+
+                # Perform the referential integrity check
+                if not check_referential_integrity(foreign_keys, value_dict, data):
+                    msg = "Foreign key value does not exist in the referenced primary key."
+                    serverSocket.sendto(msg.encode(), address)
+                    return
+
+                # Insert data into the master K-V file in the specified format
+                master_kv_filename = f"{table_name}_master_kv.txt"
+                with open(master_kv_filename, "a") as master_kv_file:
+                    # Create a dictionary for the key-value entry
+                    kv_entry = {
+                        'Key': primary_key_value,
+                        'Value': non_primary_attributes
+                    }
+                    # Convert the dictionary to a JSON-formatted string
+                    kv_entry_string = json.dumps(kv_entry)
+                    # Write the JSON-formatted string to the file
+                    master_kv_file.write(kv_entry_string + "\n")
+
+                # Insert data into MongoDB
+                db = client[used_database]
+                collection = db[table_name]
+
+                mongo_document = {
+                    "key": primary_key_value,
+                    "values": non_primary_attributes
+                }
+
+                # If no documents with non-empty 'key' are found, then delete the document with empty 'key' and 'values'
+                if collection.count_documents({'key': {'$ne': ""}}) == 0:
+                    collection.delete_one({'key': "", 'values': ""})
+
+                if check_primary_key_uniqueness(collection, 'key', primary_key_value):
+                    collection.insert_one(mongo_document)
+                    # insert_into_indexes(table_name, value_dict, primary_key_value,
+                    #                     [attr["attributeName"] for attr in primary_key_attributes],
+                    #                     non_primary_attributes)
+                    # msg = f"Values inserted into table {table_name}."
+                    # serverSocket.sendto(msg.encode(), address)
+                else:
+                    # The primary key is not unique
+                    msg = f"Insert failed. Primary key already exists."
+                    serverSocket.sendto(msg.encode(), address)
+
+            else:
+                msg = f"Table {table_name} does not exist in the current database."
+                serverSocket.sendto(msg.encode(), address)
+        else:
+            msg = "Database not selected. Use 'use' command to select a database."
+            serverSocket.sendto(msg.encode(), address)
+
+
 print("Server Up")
 
 while True:
@@ -1175,9 +1374,17 @@ while True:
 
     clientData = clientData.decode().split(" ")
 
-    if clientData[0].lower() in ["create", "drop", "use", "insert", "delete", "select"]:
+    if clientData[0].lower() in ["create", "drop", "use", "insert", "delete", "select", "insert_sequential"]:
         func = locals()[clientData[0]]
-        del clientData[0]
-        func(clientData)
+        if clientData[0].lower() == "insert_sequential":
+            start = datetime.datetime.now()
+            for i in range(1000000):
+                func(["into", "insert_sequential", "values", "(", f"{i + 1}", f"'Name{i + 1}'",
+                      f"{random.randint(1, 10)}", ")"])
+            end = datetime.datetime.now()
+            print("Execution time", end - start)
+        else:
+            del clientData[0]
+            func(clientData)
     else:
         print("INVALID COMMAND")

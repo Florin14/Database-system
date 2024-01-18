@@ -728,6 +728,104 @@
                             ]
                         }
                     ]
+                },
+                "table_to_insert": {
+                    "tableName": "table_to_insert",
+                    "fileName": "table_to_insert.bin",
+                    "rowLength": 3,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "mark",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "table_to_insert",
+                            "keyLength": 15,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "insert_sequential": {
+                    "tableName": "insert_sequential",
+                    "fileName": "insert_sequential.bin",
+                    "rowLength": 3,
+                    "structure": [
+                        {
+                            "attributeName": "id",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "0"
+                        },
+                        {
+                            "attributeName": "name",
+                            "type": "varchar",
+                            "length": "10",
+                            "isNull": "1"
+                        },
+                        {
+                            "attributeName": "mark",
+                            "type": "int",
+                            "length": "4",
+                            "isNull": "1"
+                        }
+                    ],
+                    "primaryKey": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "foreignKeys": [],
+                    "uniqueKeys": [
+                        {
+                            "attributeName": "id"
+                        }
+                    ],
+                    "indexFiles": [
+                        {
+                            "indexName": "insert_sequential",
+                            "keyLength": 17,
+                            "isUnique": "1",
+                            "indexType": "BTree",
+                            "indexAttributes": [
+                                {
+                                    "attributeName": "id"
+                                }
+                            ]
+                        }
+                    ]
                 }
             }
         }
